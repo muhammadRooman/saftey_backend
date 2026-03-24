@@ -1,13 +1,8 @@
 const mongoose = require("mongoose");
 
 exports.connect = () => {
-  const mongoUri = process.env.MONGO_URI;
-  if (!mongoUri) {
-    console.error("❌ MONGO_URI is missing. Add it in backend/.env");
-    process.exit(1);
-  }
-
-  mongoose.connect(mongoUri, {
+  
+    mongoose.connect("mongodb+srv://muhammadrooman:Rooman123@cluster0.qfqum5j.mongodb.net/TestingProject?retryWrites=true&w=majority", {
     useNewUrlParser: true,
     useUnifiedTopology: true,
   });
