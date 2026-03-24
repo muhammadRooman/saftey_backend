@@ -26,8 +26,8 @@ const io = new Server(server, {
 // Middleware
 app.use(
   cors({
-    origin: "*",
-    methods: ["GET", "POST", "PUT", "DELETE"],
+    origin: "https://your-frontend.vercel.app", // apka Vercel frontend URL
+    methods: ["GET","POST","PUT","DELETE"],
     credentials: true,
   })
 );
