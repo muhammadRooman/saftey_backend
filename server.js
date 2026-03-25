@@ -38,9 +38,7 @@ app.use(express.urlencoded({ extended: true }));
 const apiRoutes = require("./src/admin/routes/index");
 app.use("/api", apiRoutes);
 app.use("/uploads", express.static("uploads"));
-app.get("/", (req, res) => {
-  res.status(200).send("✅ Server is running on Railway");
-});
+app.get("/", (req, res) => res.send("✅ Server running on Railway"));
 // Track online students per studentId (safe for multiple tabs)
 // studentId -> Set(socketIds)
 const onlineStudentsById = new Map();
