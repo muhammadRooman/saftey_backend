@@ -26,8 +26,8 @@ const io = new Server(server, {
 // Middleware
 app.use(
   cors({
-    origin: "https://your-frontend.vercel.app", // apka Vercel frontend URL
-    methods: ["GET","POST","PUT","DELETE"],
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
   })
 );
@@ -267,6 +267,6 @@ io.on("connection", (socket) => {
 });
 
 // Start server (HTTP + Socket.IO)
-server.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`✅ Server running on port ${PORT}`);
 });
