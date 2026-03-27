@@ -291,7 +291,6 @@
 //   console.log(`✅ Server running on port ${PORT}`);
 // });
 
-
 // server.js
 const express = require("express");
 const cors = require("cors");
@@ -299,10 +298,12 @@ const http = require("http");
 const { Server } = require("socket.io");
 const fs = require("fs");
 const path = require("path");
+const jwt = require("jsonwebtoken");
 require("dotenv").config();
 
 // Models
 const Message = require("./src/admin/models/message.model");
+const User = require("./src/admin/models/user.model"); // Example user model
 
 // App setup
 const app = express();
@@ -318,7 +319,7 @@ if (!fs.existsSync(uploadsDir)) {
 }
 app.use("/uploads", express.static(uploadsDir));
 
-// Allowed origins
+// Allowed origins (Frontend URLs)
 const allowedOrigins = [
   "http://localhost:3000",
   "https://saftey-frontend.vercel.app",
@@ -329,23 +330,54 @@ const allowedOrigins = [
 app.use(cors({
   origin: function(origin, callback) {
     if (!origin) return callback(null, true); // Postman or server-to-server
-    if (allowedOrigins.indexOf(origin) === -1) {
+    if (!allowedOrigins.includes(origin)) {
       return callback(new Error("CORS policy does not allow this origin"), false);
     }
     return callback(null, true);
   },
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  credentials: true
+  credentials: true, // ✅ important for cookies/auth
+  methods: ["GET", "POST", "PUT", "DELETE"]
 }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Routes
+// ========== LOGIN ROUTE (JWT Example) ==========
+app.post("/api/login", async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    // Authenticate user
+    const user = await User.findOne({ email });
+    if (!user) return res.status(401).json({ message: "User not found" });
+
+    const isMatch = user.password === password; // Simple example, ideally hash compare
+    if (!isMatch) return res.status(401).json({ message: "Invalid password" });
+
+    // Generate JWT
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+
+    // Set cookie for cross-origin
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: true,       // HTTPS required on production
+      sameSite: "None"    // ✅ allows Vercel <-> Render cross-origin
+    });
+
+    res.json({ success: true, token, user: { id: user._id, email: user.email } });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// ================== API Routes ==================
 const apiRoutes = require("./src/admin/routes/index");
 app.use("/api", apiRoutes);
+
 app.get("/", (req, res) => res.send("✅ Server running"));
 
-// ========== SOCKET.IO SETUP ==========
+// ================= SOCKET.IO ===================
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
@@ -364,11 +396,8 @@ io.on("connection", (socket) => {
   // Admin joins
   socket.on("join-admin", () => {
     socket.join("admin-room");
-    console.log("Admin joined admin-room");
-    try {
-      const onlineIds = Array.from(onlineStudentsById.keys());
-      socket.emit("online-students", { studentIds: onlineIds });
-    } catch {}
+    const onlineIds = Array.from(onlineStudentsById.keys());
+    socket.emit("online-students", { studentIds: onlineIds });
   });
 
   // Student joins
@@ -387,7 +416,6 @@ io.on("connection", (socket) => {
     if (beforeSize === 0) {
       io.to("admin-room").emit("student-online", { studentId: sid });
     }
-    console.log(`Student joined room ${room}`);
   });
 
   // Admin -> Student message
@@ -407,7 +435,7 @@ io.on("connection", (socket) => {
         deliveredToStudent,
         deliveredAtStudent: deliveredToStudent ? new Date() : null,
         deliveredToAdmin: false,
-        deliveredAtAdmin: null,
+        deliveredAtAdmin: null
       });
 
       const payload = { ...saved.toObject() };
@@ -419,7 +447,7 @@ io.on("connection", (socket) => {
       io.to(studentRoom).emit("student-alert", {
         type: "new-message",
         from: "admin",
-        message,
+        message
       });
     } catch {}
   });
@@ -441,7 +469,7 @@ io.on("connection", (socket) => {
         deliveredToAdmin,
         deliveredToStudent: false,
         deliveredAtAdmin: deliveredToAdmin ? new Date() : null,
-        deliveredAtStudent: null,
+        deliveredAtStudent: null
       });
 
       const payload = { ...saved.toObject() };
@@ -451,34 +479,29 @@ io.on("connection", (socket) => {
     } catch {}
   });
 
-  // Student marks messages as seen
+  // Mark messages as seen
   socket.on("student-mark-seen", async ({ studentId, messageIds }) => {
     if (!studentId || !Array.isArray(messageIds) || messageIds.length === 0) return;
-    try {
-      await Message.updateMany(
-        { _id: { $in: messageIds }, from: "admin", to: studentId },
-        { $set: { seenByStudent: true, seenAtStudent: new Date() } }
-      );
-      const updated = await Message.find({ _id: { $in: messageIds } }).sort({ createdAt: 1 }).lean();
-      io.to("admin-room").emit("message-seen-updated", { messages: updated });
-    } catch {}
+    await Message.updateMany(
+      { _id: { $in: messageIds }, from: "admin", to: studentId },
+      { $set: { seenByStudent: true, seenAtStudent: new Date() } }
+    );
+    const updated = await Message.find({ _id: { $in: messageIds } }).sort({ createdAt: 1 }).lean();
+    io.to("admin-room").emit("message-seen-updated", { messages: updated });
   });
 
-  // Admin marks messages as seen
   socket.on("admin-mark-seen", async ({ studentId, messageIds }) => {
     if (!studentId || !Array.isArray(messageIds) || messageIds.length === 0) return;
-    try {
-      await Message.updateMany(
-        { _id: { $in: messageIds }, from: studentId, to: "admin" },
-        { $set: { seenByAdmin: true, seenAtAdmin: new Date() } }
-      );
-      const updated = await Message.find({ _id: { $in: messageIds } }).sort({ createdAt: 1 }).lean();
-      io.to(`student:${studentId}`).emit("message-seen-updated", { messages: updated });
-    } catch {}
+    await Message.updateMany(
+      { _id: { $in: messageIds }, from: studentId, to: "admin" },
+      { $set: { seenByAdmin: true, seenAtAdmin: new Date() } }
+    );
+    const updated = await Message.find({ _id: { $in: messageIds } }).sort({ createdAt: 1 }).lean();
+    io.to(`student:${studentId}`).emit("message-seen-updated", { messages: updated });
   });
 
+  // Disconnect
   socket.on("disconnect", () => {
-    console.log("Socket disconnected:", socket.id);
     const studentId = socket.data.studentId;
     if (studentId) {
       const set = onlineStudentsById.get(studentId);
@@ -495,11 +518,7 @@ io.on("connection", (socket) => {
   });
 });
 
-// Start server
+// ================= START SERVER =================
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
-
-
-
-
