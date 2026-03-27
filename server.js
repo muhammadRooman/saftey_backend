@@ -31,14 +31,17 @@ const io = new Server(server, {
 //     credentials: true,
 //   })
 // );
+
+
 const allowedOrigins = [
-  "http://localhost:3000",           // local frontend
-  "https://your-frontend.vercel.app" // deployed frontend
+  "http://localhost:3000",
+  // "https://saftey-frontend.vercel.app", // ✅ apna real URL
+  "https://saftey-frontend-git-main.vercel.app" // (optional preview URL)
 ];
+
 
 app.use(cors({
   origin: function(origin, callback){
-    // allow requests with no origin (like Postman)
     if(!origin) return callback(null, true);
     if(allowedOrigins.indexOf(origin) === -1){
       const msg = `The CORS policy for this site does not allow access from the specified Origin.`;
