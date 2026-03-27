@@ -32,10 +32,9 @@ const io = new Server(server, {
 //   })
 // );
 
-
 const allowedOrigins = [
   "http://localhost:3000",
-  // "https://saftey-frontend.vercel.app", // ✅ apna real URL
+  "https://saftey-frontend.vercel.app", // ✅ apna real URL
   "https://saftey-frontend-git-main.vercel.app" // (optional preview URL)
 ];
 
