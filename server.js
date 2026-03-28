@@ -321,24 +321,22 @@ app.use("/uploads", express.static(uploadsDir));
 
 // Allowed origins (Frontend URLs)
 const allowedOrigins = [
-  "http://localhost:3000",
   "https://saftey-frontend.vercel.app",
   "https://saftey-frontend-git-main.vercel.app"
 ];
 
-// Middleware
 app.use(cors({
   origin: function(origin, callback) {
-    if (!origin) return callback(null, true); // Postman or server-to-server
-    if (!allowedOrigins.includes(origin)) {
-      return callback(new Error("CORS policy does not allow this origin"), false);
+    console.log("Origin:", origin); // 👈 DEBUG
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      return callback(null, false);
     }
-    return callback(null, true);
   },
-  credentials: true, // ✅ important for cookies/auth
-  methods: ["GET", "POST", "PUT", "DELETE"]
+  credentials: true
 }));
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
