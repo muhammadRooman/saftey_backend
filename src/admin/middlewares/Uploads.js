@@ -100,6 +100,13 @@ const uploadSingleMedia = multer({
   limits: { fileSize: 100 * 1024 * 1024 },
 }).single("media");
 
+/** Optional job poster image (image-based job ads); manual posts may omit file */
+const uploadJobPosterOptional = multer({
+  storage: storage,
+  fileFilter: imageFileFilter,
+  limits: { fileSize: 10 * 1024 * 1024 },
+}).single("posterImage");
+
 // Multer error handling middleware
 const handleMulterError = (err, req, res, next) => {
   if (err instanceof multer.MulterError && err.code === "LIMIT_UNEXPECTED_FILE") {
@@ -117,5 +124,6 @@ module.exports = {
   uploadSingleImage,
   uploadSingleVideo,
   uploadSingleMedia,
+  uploadJobPosterOptional,
   handleMulterError,
 };

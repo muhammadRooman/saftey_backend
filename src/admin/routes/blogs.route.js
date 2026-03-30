@@ -9,6 +9,7 @@ const {
   uploadSingleImage,
   uploadSingleVideo,
   uploadSingleMedia,
+  uploadJobPosterOptional,
   handleMulterError,
 } = require("../middlewares/Uploads");
 const { verifyToken } = require("../middlewares/Auth.middleware");
@@ -16,6 +17,7 @@ const CourseVideoController = require("../conrollers/courseVideo.controller");
 const ProvideLinkController = require("../conrollers/ProvideLink.controller");
 const TeacherInfoController = require("../conrollers/teacherInfo.controller");
 const OhsCourseController = require("../conrollers/ohsCourse.controller");
+const JobPostController = require("../conrollers/jobPost.controller");
 
 // Blog Routes
 router.post("/blog", verifyToken, uploadSingleImage, handleMulterError, BlogController.createBlog);
@@ -110,5 +112,24 @@ router.delete("/teacher-info/:id", verifyToken, TeacherInfoController.deleteTeac
 // OHS All Courses (single description + multiple course names)
 router.get("/ohs-courses", verifyToken, OhsCourseController.getOhsCourses);
 router.put("/ohs-courses", verifyToken, OhsCourseController.updateOhsCourses);
+
+// Job posts (admin: image or manual; students: list published)
+router.post(
+  "/job-post",
+  verifyToken,
+  uploadJobPosterOptional,
+  handleMulterError,
+  JobPostController.createJob
+);
+router.get("/job-post", verifyToken, JobPostController.listJobs);
+router.get("/job-post/:id", verifyToken, JobPostController.getJobById);
+router.put(
+  "/job-post/:id",
+  verifyToken,
+  uploadJobPosterOptional,
+  handleMulterError,
+  JobPostController.updateJob
+);
+router.delete("/job-post/:id", verifyToken, JobPostController.deleteJob);
 
 module.exports = router;

@@ -17,6 +17,12 @@ const signupSchema = new mongoose.Schema({
     // required: true,
   },
    hasLink: { type: Boolean, default: false },
+  /** Admin sets which video language this student sees (Urdu / English / Arabic). */
+  videoLanguage: {
+    type: String,
+    enum: ["Urdu", "English", "Arabic"],
+    default: "English",
+  },
 }, { timestamps: true });
 
 module.exports = mongoose.model("signup", signupSchema);

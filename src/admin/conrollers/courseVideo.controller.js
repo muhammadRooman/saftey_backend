@@ -1,10 +1,66 @@
 const CourseVideo = require("../models/courseVideo.model");
 const Signup = require("../models/SignUp.model");
 
+const LANGS = ["Urdu", "English", "Arabic"];
+
+/**
+ * List videos from MongoDB directly + attach teachers.
+ * Avoids Mongoose hydrating with a stale cached schema that omits `language` in JSON even when stored in DB.
+ */
+async function listVideosFromDb(match) {
+  const coll = CourseVideo.collection;
+  const rows = await coll.find(match).sort({ createdAt: -1 }).toArray();
+  const teacherIdStrings = [...new Set(rows.map((r) => r.teacher && String(r.teacher)))];
+  let teacherById = {};
+  if (teacherIdStrings.length) {
+    const teachers = await Signup.find({ _id: { $in: teacherIdStrings } })
+      .select("name email")
+      .lean();
+    teacherById = Object.fromEntries(
+      teachers.map((t) => [String(t._id), { _id: t._id, name: t.name, email: t.email }])
+    );
+  }
+  return rows.map((r) => ({
+    _id: r._id,
+    title: r.title,
+    courseType: r.courseType,
+    videoUrl: r.videoUrl,
+    language: r.language != null && r.language !== "" ? r.language : "English",
+    teacher: teacherById[String(r.teacher)] || r.teacher,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+    __v: r.__v,
+  }));
+}
+
+/** Normalize language from multipart body or query (trim, case-insensitive). */
+function parseLanguage(raw) {
+  let v = raw;
+  if (Array.isArray(v)) v = v[0];
+  if (v == null || v === "") return "English";
+  const s = String(v).trim();
+  if (!s) return "English";
+  const lower = s.toLowerCase();
+  const map = { urdu: "Urdu", english: "English", arabic: "Arabic" };
+  if (map[lower]) return map[lower];
+  return LANGS.includes(s) ? s : "English";
+}
+
+/** Match videos for a student's assigned language; legacy docs without `language` count as English. */
+function buildLanguageQuery(lang) {
+  const l = parseLanguage(lang);
+  if (l === "English") {
+    return {
+      $or: [{ language: "English" }, { language: { $exists: false } }, { language: null }],
+    };
+  }
+  return { language: l };
+}
+
 // Teacher: upload course video (NEBOSH / IOSH / OSHA)
 exports.uploadVideo = async (req, res) => {
   try {
-    const { title, courseType } = req.body;
+    const { title, courseType, language, videoLang } = req.body;
     const teacherId = req.userId;
 
     if (!title || !courseType) {
@@ -17,9 +73,14 @@ exports.uploadVideo = async (req, res) => {
       return res.status(400).json({ message: "Video file is required" });
     }
 
+    // Body fields sometimes missing with multipart; also accept query (?language=) and alias videoLang
+    const langRaw = language ?? videoLang ?? req.query.language;
+    const langResolved = parseLanguage(langRaw);
+
     const video = new CourseVideo({
       title,
       courseType,
+      language: langResolved,
       videoUrl: req.file.filename,
       teacher: teacherId,
     });
@@ -27,7 +88,13 @@ exports.uploadVideo = async (req, res) => {
 
     res.status(201).json({
       message: "Video uploaded successfully",
-      video: { _id: video._id, title: video.title, courseType: video.courseType, videoUrl: video.videoUrl },
+      video: {
+        _id: video._id,
+        title: video.title,
+        courseType: video.courseType,
+        language: video.language,
+        videoUrl: video.videoUrl,
+      },
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -37,14 +104,15 @@ exports.uploadVideo = async (req, res) => {
 // List all videos (teacher) - optional filter by courseType
 exports.getVideos = async (req, res) => {
   try {
-    const { courseType } = req.query;
+    const { courseType, language } = req.query;
     const filter = {};
     if (courseType && ["NEBOSH", "IOSH", "OSHA", "RIGGER3"].includes(courseType)) {
       filter.courseType = courseType;
     }
-    const videos = await CourseVideo.find(filter)
-      .populate("teacher", "name email")
-      .sort({ createdAt: -1 });
+    if (language != null && String(language).trim() !== "") {
+      Object.assign(filter, buildLanguageQuery(language));
+    }
+    const videos = await listVideosFromDb(filter);
     res.status(200).json(videos);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -53,7 +121,7 @@ exports.getVideos = async (req, res) => {
 exports.updateVideo = async (req, res) => {
   try {
     const { id } = req.params; // video ID
-    const { title, courseType } = req.body;
+    const { title, courseType, language, videoLang } = req.body;
 
     if (!id) return res.status(400).json({ message: "Video ID is required" });
 
@@ -68,6 +136,10 @@ exports.updateVideo = async (req, res) => {
     // Update fields if provided
     if (title) video.title = title;
     if (courseType) video.courseType = courseType;
+    const langRaw = language ?? videoLang ?? req.query.language;
+    if (langRaw != null && String(langRaw).trim() !== "") {
+      video.language = parseLanguage(langRaw);
+    }
 
     // If new video file is uploaded
     if (req.file && req.file.filename) {
@@ -82,6 +154,7 @@ exports.updateVideo = async (req, res) => {
         _id: video._id,
         title: video.title,
         courseType: video.courseType,
+        language: video.language,
         videoUrl: video.videoUrl,
       },
     });
@@ -93,7 +166,7 @@ exports.updateVideo = async (req, res) => {
 exports.getVideosForStudent = async (req, res) => {
   try {
     const studentId = req.params.studentId;
-    const student = await Signup.findById(studentId).select("subject");
+    const student = await Signup.findById(studentId).select("subject videoLanguage");
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
     }
@@ -101,9 +174,11 @@ exports.getVideosForStudent = async (req, res) => {
     if (courseTypes.length === 0) {
       return res.status(200).json([]);
     }
-    const videos = await CourseVideo.find({ courseType: { $in: courseTypes } })
-      .populate("teacher", "name email")
-      .sort({ createdAt: -1 });
+    const lang = parseLanguage(student.videoLanguage);
+    const videos = await listVideosFromDb({
+      courseType: { $in: courseTypes },
+      ...buildLanguageQuery(lang),
+    });
     res.status(200).json(videos);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -114,7 +189,7 @@ exports.getVideosForStudent = async (req, res) => {
 exports.getMyVideos = async (req, res) => {
   try {
     const userId = req.userId;
-    const user = await Signup.findById(userId).select("subject role");
+    const user = await Signup.findById(userId).select("subject role videoLanguage");
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
@@ -122,9 +197,11 @@ exports.getMyVideos = async (req, res) => {
     if (courseTypes.length === 0) {
       return res.status(200).json([]);
     }
-    const videos = await CourseVideo.find({ courseType: { $in: courseTypes } })
-      .populate("teacher", "name email")
-      .sort({ createdAt: -1 });
+    const lang = parseLanguage(user.videoLanguage);
+    const videos = await listVideosFromDb({
+      courseType: { $in: courseTypes },
+      ...buildLanguageQuery(lang),
+    });
     res.status(200).json(videos);
   } catch (error) {
     res.status(500).json({ error: error.message });

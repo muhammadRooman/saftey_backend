@@ -67,7 +67,7 @@ exports.getAllUsers = async (req, res) => {
 exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, email, phone, password, role, subject } = req.body;
+    const { name, email, phone, password, role, subject, videoLanguage } = req.body;
 
     console.log("Update User ID:", id);
     console.log("Update Data:", req.body);
@@ -84,6 +84,9 @@ exports.updateUser = async (req, res) => {
     if (phone) user.phone = phone;
     if (role) user.role = role;
     if (subject) user.subject = subject;
+    if (videoLanguage && ["Urdu", "English", "Arabic"].includes(videoLanguage)) {
+      user.videoLanguage = videoLanguage;
+    }
 
     // If password provided → hash it
     if (password) {
@@ -108,7 +111,7 @@ exports.updateUser = async (req, res) => {
 // Signup Function
 exports.signUp = async (req, res) => {
   try {
-    const { name, email, password, phone, role,subject } = req.body;
+    const { name, email, password, phone, role, subject, videoLanguage } = req.body;
 console.log("1234567",req.body)
     // Basic validation
     // if (!["teacher", "student"].includes(role)) {
@@ -123,7 +126,16 @@ console.log("1234567",req.body)
     // ✅ Hash the password before saving
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const newUser = new Signup({ name, email, password: hashedPassword, phone, subject });
+    const newUser = new Signup({
+      name,
+      email,
+      password: hashedPassword,
+      phone,
+      subject,
+      ...(videoLanguage && ["Urdu", "English", "Arabic"].includes(videoLanguage)
+        ? { videoLanguage }
+        : {}),
+    });
     await newUser.save();
 
     res.status(201).json({ message: "User registered successfully", user: newUser });
@@ -139,7 +151,7 @@ exports.getLoggedInUserDetails = async (req, res) => {
   try {
     const id = req.user.userId; // 👈 JWT middleware سے آئے گا
 
-    const user = await Signup.findById(id).select("name email role subject");
+    const user = await Signup.findById(id).select("name email role subject videoLanguage");
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
@@ -197,7 +209,7 @@ console.log("password",password);
 // update Profile Function
 exports.updateStudent = async (req, res) => {
   try {
-    const { name, email, password, phone,subject } = req.body;
+    const { name, email, password, phone, subject, videoLanguage } = req.body;
     const { id } = req.params;
 
     console.log("User ID:", id);
@@ -206,6 +218,7 @@ exports.updateStudent = async (req, res) => {
     console.log("Phone:", phone);
     console.log("Password:", password);
     console.log("subject:", subject);
+    console.log("videoLanguage:", videoLanguage);
 
     // Find user by ID (not email)
     const user = await Signup.findById(id);
@@ -218,6 +231,9 @@ exports.updateStudent = async (req, res) => {
     if (email) user.email = email;
     if (phone) user.phone = phone;
     if (subject) user.subject = subject;
+    if (videoLanguage && ["Urdu", "English", "Arabic"].includes(videoLanguage)) {
+      user.videoLanguage = videoLanguage;
+    }
     if (password) user.password = password;
 
     if (password) {
