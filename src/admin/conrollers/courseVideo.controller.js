@@ -25,6 +25,7 @@ async function listVideosFromDb(match) {
     title: r.title,
     courseType: r.courseType,
     videoUrl: r.videoUrl,
+    fileUrl: r.fileUrl || "",
     language: r.language != null && r.language !== "" ? r.language : "English",
     teacher: teacherById[String(r.teacher)] || r.teacher,
     createdAt: r.createdAt,
@@ -69,7 +70,11 @@ exports.uploadVideo = async (req, res) => {
     if (!["NEBOSH", "IOSH", "OSHA", "RIGGER3"].includes(courseType)) {
       return res.status(400).json({ message: "courseType must be NEBOSH, RIGGER3, IOSH or OSHA" });
     }
-    if (!req.file || !req.file.filename) {
+    // Support both: old `.single("video")` and new `.fields([{name:'video'},{name:'pdf'}])`
+    const videoFile = req.files?.video?.[0] || req.file;
+    const pdfFile = req.files?.pdf?.[0] || null;
+
+    if (!videoFile || !videoFile.filename) {
       return res.status(400).json({ message: "Video file is required" });
     }
 
@@ -81,7 +86,8 @@ exports.uploadVideo = async (req, res) => {
       title,
       courseType,
       language: langResolved,
-      videoUrl: req.file.filename,
+      videoUrl: videoFile.filename,
+      fileUrl: pdfFile?.filename || "",
       teacher: teacherId,
     });
     await video.save();
@@ -94,6 +100,7 @@ exports.uploadVideo = async (req, res) => {
         courseType: video.courseType,
         language: video.language,
         videoUrl: video.videoUrl,
+        fileUrl: video.fileUrl,
       },
     });
   } catch (error) {
@@ -142,8 +149,16 @@ exports.updateVideo = async (req, res) => {
     }
 
     // If new video file is uploaded
-    if (req.file && req.file.filename) {
-      video.videoUrl = req.file.filename;
+    const videoFile = req.files?.video?.[0] || req.file;
+    const pdfFile = req.files?.pdf?.[0] || null;
+
+    if (videoFile && videoFile.filename) {
+      video.videoUrl = videoFile.filename;
+    }
+
+    // Optional course attachment (PDF). If missing, keep the previous one.
+    if (pdfFile && pdfFile.filename) {
+      video.fileUrl = pdfFile.filename;
     }
 
     await video.save();
@@ -156,6 +171,7 @@ exports.updateVideo = async (req, res) => {
         courseType: video.courseType,
         language: video.language,
         videoUrl: video.videoUrl,
+        fileUrl: video.fileUrl,
       },
     });
   } catch (error) {

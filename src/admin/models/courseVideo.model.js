@@ -9,6 +9,8 @@ const courseVideoSchema = new mongoose.Schema(
       required: true,
     },
     videoUrl: { type: String, required: true }, // stored filename in uploads folder
+    /** Optional attachment for the course (uploaded by teacher/admin). */
+    fileUrl: { type: String, default: "" }, // stored filename in uploads folder
     language: {
       type: String,
       enum: ["Urdu", "English", "Arabic"],

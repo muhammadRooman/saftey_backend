@@ -10,6 +10,7 @@ const {
   uploadSingleVideo,
   uploadSingleMedia,
   uploadJobPosterOptional,
+  uploadCourseVideoOptionalPdf,
   handleMulterError,
 } = require("../middlewares/Uploads");
 const { verifyToken } = require("../middlewares/Auth.middleware");
@@ -61,7 +62,7 @@ router.get("/assignments/teacher/:id", verifyToken, AssignmentController.getAssi
 router.post("/assignments/marks/:id", verifyToken, AssignmentController.postAssighnamnetMarks);
 
 // Course Videos (NEBOSH / IOSH / OSHA) - Teacher upload, Student gets by assigned courses
-router.post("/courseVideo", verifyToken, uploadSingleVideo, handleMulterError, CourseVideoController.uploadVideo);
+router.post("/courseVideo", verifyToken, uploadCourseVideoOptionalPdf, handleMulterError, CourseVideoController.uploadVideo);
 router.get("/courseVideo", verifyToken, CourseVideoController.getVideos);
 router.get("/courseVideo/my-videos", verifyToken, CourseVideoController.getMyVideos);
 router.get("/courseVideo/student/:studentId", verifyToken, CourseVideoController.getVideosForStudent);
@@ -69,7 +70,7 @@ router.delete("/courseVideo/:id", verifyToken, CourseVideoController.deleteVideo
 router.put(
     "/courseVideo/:id",
     verifyToken,
-    uploadSingleVideo, // for optional video file upload
+    uploadCourseVideoOptionalPdf, // for optional video file upload + optional PDF
     handleMulterError,
     CourseVideoController.updateVideo
   );

@@ -93,6 +93,24 @@ const uploadSingleVideo = multer({
   limits: { fileSize: 100 * 1024 * 1024 }, // 100MB
 }).single("video");
 
+// Course video upload with optional PDF attachment
+const uploadCourseVideoOptionalPdf = multer({
+  storage,
+  fileFilter: (req, file, cb) => {
+    if (file.fieldname === "video") {
+      return videoFileFilter(req, file, cb);
+    }
+    if (file.fieldname === "pdf") {
+      return fileFilter(req, file, cb);
+    }
+    return cb(new Error(`Unexpected field '${file.fieldname}'`), false);
+  },
+  limits: { fileSize: 100 * 1024 * 1024 }, // keep generous for video; pdf is typically smaller
+}).fields([
+  { name: "video", maxCount: 1 },
+  { name: "pdf", maxCount: 1 },
+]);
+
 // Multer for teacher info media upload (image/video) - 100MB limit
 const uploadSingleMedia = multer({
   storage: storage,
@@ -110,7 +128,14 @@ const uploadJobPosterOptional = multer({
 // Multer error handling middleware
 const handleMulterError = (err, req, res, next) => {
   if (err instanceof multer.MulterError && err.code === "LIMIT_UNEXPECTED_FILE") {
-    return res.status(400).json({ message: `Multer error: Unexpected field '${err.field}'. Expected: ${req.route.path.includes("/submit") || req.route.path.includes("/updateAssignment") ? "image or pdf" : "image"}` });
+    const routePath = req.route?.path || "";
+    const expected =
+      routePath.includes("/courseVideo")
+        ? "video (and optional pdf)"
+        : routePath.includes("/submit") || routePath.includes("/updateAssignment")
+          ? "image or pdf"
+          : "image";
+    return res.status(400).json({ message: `Multer error: Unexpected field '${err.field}'. Expected: ${expected}` });
   } else if (err instanceof multer.MulterError) {
     return res.status(400).json({ message: `Multer error: ${err.message}` });
   } else if (err) {
@@ -123,6 +148,7 @@ module.exports = {
   upload,
   uploadSingleImage,
   uploadSingleVideo,
+  uploadCourseVideoOptionalPdf,
   uploadSingleMedia,
   uploadJobPosterOptional,
   handleMulterError,
