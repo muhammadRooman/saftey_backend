@@ -319,25 +319,45 @@ if (!fs.existsSync(uploadsDir)) {
 app.use("/uploads", express.static(uploadsDir));
 
 // Allowed origins
+const envAllowedOrigins = (process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 const allowedOrigins = [
   "http://localhost:3000",
   "https://saftey-frontend.vercel.app",
-  "https://saftey-frontend-git-main.vercel.app"
+  "https://saftey-frontend-git-main.vercel.app",
+  "https://safety-front-7j5n.vercel.app",
+  ...envAllowedOrigins,
 ];
 
-// Middleware
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+  if (allowedOrigins.includes(origin)) return true;
+
+  // Allow Vercel preview deployments for this frontend project.
+  const vercelPreviewPattern = /^https:\/\/safety-front-[a-z0-9-]+\.vercel\.app$/i;
+  if (vercelPreviewPattern.test(origin)) return true;
+
+  return false;
+};
+
 app.use(cors({
   origin: function (origin, callback) {
+    // allow requests with no origin (like mobile apps, postman)
     if (!origin) return callback(null, true);
 
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
+    if (isAllowedOrigin(origin)) {
+      callback(null, true);
     } else {
-      return callback(new Error("CORS not allowed"), false);
+      console.log("❌ Blocked by CORS:", origin);
+      callback(new Error("Not allowed by CORS"));
     }
   },
   credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE"],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
 
@@ -353,7 +373,13 @@ app.get("/", (req, res) => res.send("✅ Server running"));
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      if (isAllowedOrigin(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true
   }
