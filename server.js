@@ -327,9 +327,20 @@ const allowedOrigins = [
 
 // Middleware
 app.use(cors({
-  origin: true,
-  credentials: true
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      return callback(new Error("CORS not allowed"), false);
+    }
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE"],
 }));
+
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
