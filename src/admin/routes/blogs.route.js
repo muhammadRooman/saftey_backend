@@ -4,6 +4,7 @@ const BlogController = require("../conrollers/Blogs.controller");
 const EnrollStudentController = require("../conrollers/enrollStudent.controller");
 const EnrollTeacherController = require("../conrollers/enrollTeacher.controller");
 const AssignmentController = require("../conrollers/Assignmant.controller");
+const AdminLiveClassController = require("../conrollers/liveClass.controller");
 const {
   upload,
   uploadSingleImage,
@@ -132,5 +133,75 @@ router.put(
   JobPostController.updateJob
 );
 router.delete("/job-post/:id", verifyToken, JobPostController.deleteJob);
+
+
+// ADmin Live class links
+// 
+
+
+// ==============================
+// 🔴 LIVE CLASS ROUTES
+// ==============================
+
+// 👨‍🏫 Teacher (Admin)
+
+// Create live class
+// Preferred: /api/admin/live-class
+router.post("/live-class", verifyToken, AdminLiveClassController.createLiveClass);
+// Backward compatibility: /api/admin/admin/live-class
+router.post(
+  "/admin/live-class",
+  verifyToken,
+  AdminLiveClassController.createLiveClass
+);
+
+// Get all classes created by teacher
+router.get(
+  "/live-class/teacher",
+  verifyToken,
+  AdminLiveClassController.listTeacherClasses
+);
+
+// Update class status (scheduled → live → ended)
+router.patch(
+  "/live-class/:id/status",
+  verifyToken,
+  AdminLiveClassController.setLiveClassStatus
+);
+router.delete(
+  "/live-class/:id",
+  verifyToken,
+  AdminLiveClassController.deleteLiveClass
+);
+
+
+
+// 👨‍🎓 Student
+
+// Get all assigned classes
+router.get(
+  "/student/live-class",
+  verifyToken,
+  AdminLiveClassController.listStudentClasses
+);
+// Preferred REST shape for student list
+router.get(
+  "/live-class/student",
+  verifyToken,
+  AdminLiveClassController.listStudentClasses
+);
+
+// Get currently active class (auto join)
+router.get(
+  "/student/live-class/active",
+  verifyToken,
+  AdminLiveClassController.getStudentActiveClass
+);
+// Preferred REST shape for active class
+router.get(
+  "/live-class/student/active",
+  verifyToken,
+  AdminLiveClassController.getStudentActiveClass
+);
 
 module.exports = router;
