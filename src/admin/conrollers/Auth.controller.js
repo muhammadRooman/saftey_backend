@@ -3,6 +3,21 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken"); // Add JWT if you want to use it for login
 const nodemailer = require("nodemailer");
 
+const VIDEO_LANGUAGES = ["Urdu", "English", "Arabic", "Pashto"];
+
+/** Same idea as course videos: trim + lowercase aliases so "pashto" / "PASHTO" still saves. */
+function normalizeVideoLanguage(raw) {
+  if (raw == null || raw === "") return null;
+  let v = raw;
+  if (Array.isArray(v)) v = v[0];
+  const s = String(v).trim();
+  if (!s) return null;
+  const lower = s.toLowerCase();
+  const map = { urdu: "Urdu", english: "English", arabic: "Arabic", pashto: "Pashto" };
+  if (map[lower]) return map[lower];
+  return VIDEO_LANGUAGES.includes(s) ? s : null;
+}
+
 //  
 exports.getUser = async (req, res) => {
   try {
@@ -84,9 +99,8 @@ exports.updateUser = async (req, res) => {
     if (phone) user.phone = phone;
     if (role) user.role = role;
     if (subject) user.subject = subject;
-    if (videoLanguage && ["Urdu", "English", "Arabic"].includes(videoLanguage)) {
-      user.videoLanguage = videoLanguage;
-    }
+    const vlUser = normalizeVideoLanguage(videoLanguage);
+    if (vlUser) user.videoLanguage = vlUser;
 
     // If password provided → hash it
     if (password) {
@@ -126,15 +140,14 @@ console.log("1234567",req.body)
     // ✅ Hash the password before saving
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    const vl = normalizeVideoLanguage(videoLanguage);
     const newUser = new Signup({
       name,
       email,
       password: hashedPassword,
       phone,
       subject,
-      ...(videoLanguage && ["Urdu", "English", "Arabic"].includes(videoLanguage)
-        ? { videoLanguage }
-        : {}),
+      ...(vl ? { videoLanguage: vl } : {}),
     });
     await newUser.save();
 
@@ -231,9 +244,8 @@ exports.updateStudent = async (req, res) => {
     if (email) user.email = email;
     if (phone) user.phone = phone;
     if (subject) user.subject = subject;
-    if (videoLanguage && ["Urdu", "English", "Arabic"].includes(videoLanguage)) {
-      user.videoLanguage = videoLanguage;
-    }
+    const vlStudent = normalizeVideoLanguage(videoLanguage);
+    if (vlStudent) user.videoLanguage = vlStudent;
     if (password) user.password = password;
 
     if (password) {

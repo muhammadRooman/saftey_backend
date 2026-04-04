@@ -20,7 +20,7 @@ const signupSchema = new mongoose.Schema({
   /** Admin sets which video language this student sees (Urdu / English / Arabic). */
   videoLanguage: {
     type: String,
-    enum: ["Urdu", "English", "Arabic"],
+    enum: ["Urdu", "English", "Arabic", "Pashto"],
     default: "English",
   },
 }, { timestamps: true });

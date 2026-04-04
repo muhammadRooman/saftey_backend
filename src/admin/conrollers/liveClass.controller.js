@@ -69,6 +69,7 @@ exports.listTeacherClasses = async (req, res) => {
     }
 
     const classes = await LiveClass.find({ createdBy: teacherId })
+      .populate("allowedStudents", "name email")
       .sort({ startTime: -1 })
       .lean();
     res.json({ success: true, data: classes.map(withMeetingUrl) });

@@ -10,6 +10,7 @@ const jobPostSchema = new mongoose.Schema(
     posterImage: { type: String, default: "" },
 
     companyName: { type: String, default: "" },
+    contactNumber: { type: String, default: "" },
     location: { type: String, default: "" },
     jobType: { type: String, default: "" },
     /** Full description for manual posts (plain or HTML from textarea) */

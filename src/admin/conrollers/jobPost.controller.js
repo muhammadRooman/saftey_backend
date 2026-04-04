@@ -29,6 +29,7 @@ function buildJobPayload(req, posterFilename) {
     title,
     description,
     companyName,
+    contactNumber,
     location,
     jobType,
     jobDescription,
@@ -48,6 +49,7 @@ function buildJobPayload(req, posterFilename) {
     description: String(description || "").trim(),
     companyName: String(companyName || "").trim(),
     location: String(location || "").trim(),
+    contactNumber: String(contactNumber || "").trim(),
     jobType: ALLOWED_JOB_TYPES.includes(jobType) ? jobType : "",
     jobDescriptionHtml: String(jobDescription || "").trim(),
     skills: parseSkills(skills),
@@ -71,14 +73,14 @@ function buildJobPayload(req, posterFilename) {
 
 exports.createJob = async (req, res) => {
   try {
-
+console.log("111111111",req.body)
     const role = await getUserRole(req.userId);
     if (role !== "teacher") {
       return res.status(403).json({ message: "Only admin can post jobs" });
     }
 
     const posterFile = req.file?.filename;
-    const body = req.body;
+    const body = req.body; 
     const postMode = body.postMode === "manual" ? "manual" : "image";
 
     if (!body.title || !String(body.title).trim()) {
@@ -98,6 +100,9 @@ exports.createJob = async (req, res) => {
       }
       if (!body.location || !String(body.location).trim()) {
         return res.status(400).json({ message: "Location is required for manual post" });
+      }
+      if (!body.contactNumber || !String(body.contactNumber).trim()) {
+        return res.status(400).json({ message: "contactNumber is required for image post" });
       }
       if (!body.jobType || !ALLOWED_JOB_TYPES.includes(body.jobType)) {
         return res.status(400).json({ message: "Valid job type is required for manual post" });
@@ -166,6 +171,7 @@ exports.updateJob = async (req, res) => {
       title,
       description,
       companyName,
+      contactNumber,
       location,
       jobType,
       jobDescription,
@@ -183,6 +189,7 @@ exports.updateJob = async (req, res) => {
     if (description != null) job.description = String(description).trim();
     if (companyName != null) job.companyName = String(companyName).trim();
     if (location != null) job.location = String(location).trim();
+    if (contactNumber != null) job.contactNumber = String(contactNumber).trim();
     if (jobType != null) job.jobType = ALLOWED_JOB_TYPES.includes(jobType) ? jobType : job.jobType;
     if (jobDescription != null) job.jobDescriptionHtml = String(jobDescription).trim();
     if (skills != null) job.skills = parseSkills(skills);

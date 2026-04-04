@@ -13,7 +13,7 @@ const courseVideoSchema = new mongoose.Schema(
     fileUrl: { type: String, default: "" }, // stored filename in uploads folder
     language: {
       type: String,
-      enum: ["Urdu", "English", "Arabic"],
+      enum: ["Urdu", "English", "Arabic", "Pashto"],
       default: "English",
     },
     teacher: {

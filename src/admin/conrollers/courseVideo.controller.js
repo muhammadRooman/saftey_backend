@@ -1,7 +1,7 @@
 const CourseVideo = require("../models/courseVideo.model");
 const Signup = require("../models/SignUp.model");
 
-const LANGS = ["Urdu", "English", "Arabic"];
+const LANGS = ["Urdu", "English", "Arabic","Pashto"];
 
 /**
  * List videos from MongoDB directly + attach teachers.
@@ -42,7 +42,7 @@ function parseLanguage(raw) {
   const s = String(v).trim();
   if (!s) return "English";
   const lower = s.toLowerCase();
-  const map = { urdu: "Urdu", english: "English", arabic: "Arabic" };
+  const map = { urdu: "Urdu", english: "English", arabic: "Arabic", pashto: "Pashto" };
   if (map[lower]) return map[lower];
   return LANGS.includes(s) ? s : "English";
 }
@@ -57,6 +57,51 @@ function buildLanguageQuery(lang) {
   }
   return { language: l };
 }
+
+async function getVideosForStudentId(studentId) {
+  const student = await Signup.findById(studentId).select("subject videoLanguage");
+  if (!student) {
+    return { notFound: true };
+  }
+
+  const courseTypes = Array.isArray(student.subject)
+    ? student.subject
+    : (student.subject ? [student.subject] : []);
+
+  if (courseTypes.length === 0) {
+    return { videos: [] };
+  }
+
+  const lang = parseLanguage(student.videoLanguage);
+  const videos = await listVideosFromDb({
+    courseType: { $in: courseTypes },
+    ...buildLanguageQuery(lang),
+  });
+
+  return { videos };
+}
+
+// One handler for both:
+// - /courseVideo/my-videos        (req.userId)
+// - /courseVideo/student/:id     (req.params.studentId)
+exports.getVideosForStudentOrMe = async (req, res) => {
+  try {
+    const studentId = req.params.studentId || req.userId;
+    const isParamStudent = Boolean(req.params.studentId);
+
+    const result = await getVideosForStudentId(studentId);
+
+    if (result.notFound) {
+      return res.status(404).json({
+        message: isParamStudent ? "Student not found" : "User not found",
+      });
+    }
+
+    res.status(200).json(result.videos);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
 
 // Teacher: upload course video (NEBOSH / IOSH / OSHA)
 exports.uploadVideo = async (req, res) => {
@@ -178,51 +223,10 @@ exports.updateVideo = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
-// Get videos for a specific student (by student userId) - only videos of courses assigned to that student
-exports.getVideosForStudent = async (req, res) => {
-  try {
-    const studentId = req.params.studentId;
-    const student = await Signup.findById(studentId).select("subject videoLanguage");
-    if (!student) {
-      return res.status(404).json({ message: "Student not found" });
-    }
-    const courseTypes = Array.isArray(student.subject) ? student.subject : (student.subject ? [student.subject] : []);
-    if (courseTypes.length === 0) {
-      return res.status(200).json([]);
-    }
-    const lang = parseLanguage(student.videoLanguage);
-    const videos = await listVideosFromDb({
-      courseType: { $in: courseTypes },
-      ...buildLanguageQuery(lang),
-    });
-    res.status(200).json(videos);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
 
-// Logged-in student: get my assigned course videos
-exports.getMyVideos = async (req, res) => {
-  try {
-    const userId = req.userId;
-    const user = await Signup.findById(userId).select("subject role videoLanguage");
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-    const courseTypes = Array.isArray(user.subject) ? user.subject : (user.subject ? [user.subject] : []);
-    if (courseTypes.length === 0) {
-      return res.status(200).json([]);
-    }
-    const lang = parseLanguage(user.videoLanguage);
-    const videos = await listVideosFromDb({
-      courseType: { $in: courseTypes },
-      ...buildLanguageQuery(lang),
-    });
-    res.status(200).json(videos);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
+// Backward compatible exports (routes can point to one handler too).
+exports.getVideosForStudent = async (req, res) => exports.getVideosForStudentOrMe(req, res);
+exports.getMyVideos = async (req, res) => exports.getVideosForStudentOrMe(req, res);
 
 // Delete video (teacher who uploaded or admin)
 exports.deleteVideo = async (req, res) => {

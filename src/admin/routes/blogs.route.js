@@ -65,8 +65,9 @@ router.post("/assignments/marks/:id", verifyToken, AssignmentController.postAssi
 // Course Videos (NEBOSH / IOSH / OSHA) - Teacher upload, Student gets by assigned courses
 router.post("/courseVideo", verifyToken, uploadCourseVideoOptionalPdf, handleMulterError, CourseVideoController.uploadVideo);
 router.get("/courseVideo", verifyToken, CourseVideoController.getVideos);
-router.get("/courseVideo/my-videos", verifyToken, CourseVideoController.getMyVideos);
-router.get("/courseVideo/student/:studentId", verifyToken, CourseVideoController.getVideosForStudent);
+// One unified handler for both endpoints
+router.get("/courseVideo/my-videos", verifyToken, CourseVideoController.getVideosForStudentOrMe);
+router.get("/courseVideo/student/:studentId", verifyToken, CourseVideoController.getVideosForStudentOrMe);
 router.delete("/courseVideo/:id", verifyToken, CourseVideoController.deleteVideo);
 router.put(
     "/courseVideo/:id",
