@@ -1,8 +1,13 @@
+const { randomUUID } = require("crypto");
 const LiveClass = require("../models/liveClass.model");
 const Signup = require("../models/SignUp.model");
 
-const randomRoomName = () =>
-  `lms-${Math.random().toString(36).slice(2, 8)}-${Date.now().toString(36)}`;
+const isHexObjectId = (id) => typeof id === "string" && /^[a-fA-F0-9]{24}$/.test(id);
+
+const randomRoomName = () => {
+  const safe = randomUUID().replace(/-/g, "");
+  return `lms-${safe}`;
+};
 
 const buildMeetingUrl = (roomName) =>
   roomName ? `https://meet.jit.si/${encodeURIComponent(roomName)}` : null;
@@ -33,7 +38,10 @@ exports.createLiveClass = async (req, res) => {
       return res.status(400).json({ message: "Invalid start/end time" });
     }
 
-    const uniqueStudentIds = Array.from(new Set(allowedStudentIds || [])).filter(Boolean);
+    const uniqueStudentIds = Array.from(new Set(allowedStudentIds || []))
+      .filter(Boolean)
+      .map(String)
+      .filter(isHexObjectId);
 
     const students = await Signup.find({
       _id: { $in: uniqueStudentIds },
@@ -43,10 +51,10 @@ exports.createLiveClass = async (req, res) => {
     const roomName = randomRoomName();
 
     const liveClass = await LiveClass.create({
-      title,
-      description,
+      title: String(title).trim(),
+      description: String(description || "").trim(),
       roomName,
-      createdBy: creatorId,
+      createdBy: creator._id,
       allowedStudents: students.map((s) => s._id),
       startTime: start,
       endTime: end,
@@ -56,7 +64,19 @@ exports.createLiveClass = async (req, res) => {
     res.status(201).json({ success: true, data: withMeetingUrl(liveClass) });
   } catch (err) {
     console.error("createLiveClass error", err);
-    res.status(500).json({ message: "Failed to create live class" });
+    if (err.name === "ValidationError") {
+      return res.status(400).json({
+        message: "Invalid live class data",
+        details: Object.values(err.errors || {}).map((e) => e.message),
+      });
+    }
+    if (err.code === 11000) {
+      return res.status(409).json({ message: "Room name already exists, try again" });
+    }
+    res.status(500).json({
+      message: "Failed to create live class",
+      ...(process.env.NODE_ENV !== "production" && { detail: err.message }),
+    });
   }
 };
 
