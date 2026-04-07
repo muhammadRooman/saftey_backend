@@ -4,10 +4,7 @@ const Signup = require("../models/SignUp.model");
 
 const isHexObjectId = (id) => typeof id === "string" && /^[a-fA-F0-9]{24}$/.test(id);
 
-const randomRoomName = () => {
-  const safe = randomUUID().replace(/-/g, "");
-  return `lms-${safe}`;
-};
+const randomRoomName = () => `lms-${randomUUID().replace(/-/g, "")}`;
 
 const buildMeetingUrl = (roomName) =>
   roomName ? `https://meet.jit.si/${encodeURIComponent(roomName)}` : null;
@@ -34,13 +31,19 @@ exports.createLiveClass = async (req, res) => {
 
     const start = new Date(startTime);
     const end = new Date(endTime);
+
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
-      return res.status(400).json({ message: "Invalid start/end time" });
+      return res.status(400).json({ message: "Invalid start/end time. End time must be after start time." });
     }
 
-    const uniqueStudentIds = Array.from(new Set(allowedStudentIds || []))
+    // === FIXED: Handle both string and array for allowedStudentIds ===
+    let studentIdsArray = Array.isArray(allowedStudentIds) 
+      ? allowedStudentIds 
+      : (allowedStudentIds ? [allowedStudentIds] : []);
+
+    const uniqueStudentIds = Array.from(new Set(studentIdsArray))
       .filter(Boolean)
-      .map(String)
+      .map(id => String(id).trim())
       .filter(isHexObjectId);
 
     const students = await Signup.find({
@@ -61,38 +64,58 @@ exports.createLiveClass = async (req, res) => {
       status: "scheduled",
     });
 
-    res.status(201).json({ success: true, data: withMeetingUrl(liveClass) });
+    res.status(201).json({ 
+      success: true, 
+      message: "Live class created successfully",
+      data: withMeetingUrl(liveClass) 
+    });
+
   } catch (err) {
-    console.error("createLiveClass error", err);
+    console.error("createLiveClass error:", {
+      message: err.message,
+      stack: err.stack,
+      name: err.name,
+      code: err.code
+    });
+
     if (err.name === "ValidationError") {
       return res.status(400).json({
         message: "Invalid live class data",
         details: Object.values(err.errors || {}).map((e) => e.message),
       });
     }
+
     if (err.code === 11000) {
-      return res.status(409).json({ message: "Room name already exists, try again" });
+      return res.status(409).json({ message: "Room name conflict. Please try again." });
     }
+
     res.status(500).json({
       message: "Failed to create live class",
-      ...(process.env.NODE_ENV !== "production" && { detail: err.message }),
+      ...(process.env.NODE_ENV !== "production" && { 
+        detail: err.message 
+      }),
     });
   }
 };
 
+// Rest of the controller functions remain almost the same (with minor improvements)
 exports.listTeacherClasses = async (req, res) => {
   try {
     const teacherId = req.userId;
     const teacher = await Signup.findById(teacherId).select("role");
     if (!teacher || teacher.role !== "teacher") {
-      return res.status(403).json({ message: "Only teachers can view teacher classes" });
+      return res.status(403).json({ message: "Only teachers can view their classes" });
     }
 
     const classes = await LiveClass.find({ createdBy: teacherId })
       .populate("allowedStudents", "name email")
       .sort({ startTime: -1 })
       .lean();
-    res.json({ success: true, data: classes.map(withMeetingUrl) });
+
+    res.json({ 
+      success: true, 
+      data: classes.map(withMeetingUrl) 
+    });
   } catch (err) {
     console.error("listTeacherClasses error", err);
     res.status(500).json({ message: "Failed to load classes" });
@@ -104,13 +127,13 @@ exports.listStudentClasses = async (req, res) => {
     const studentId = req.userId;
     const student = await Signup.findById(studentId).select("role");
     if (!student || student.role !== "student") {
-      return res.status(403).json({ message: "Only students can view student classes" });
+      return res.status(403).json({ message: "Only students can view their classes" });
     }
 
     const now = new Date();
     const classes = await LiveClass.find({
       allowedStudents: studentId,
-      endTime: { $gte: new Date(now.getTime() - 60 * 60 * 1000) },
+      endTime: { $gte: new Date(now.getTime() - 60 * 60 * 1000) }, // last 1 hour
       status: { $ne: "cancelled" },
     })
       .sort({ startTime: 1 })
@@ -132,38 +155,37 @@ exports.getStudentActiveClass = async (req, res) => {
     }
 
     const now = new Date();
-    // 1) If teacher pressed "Start Live", student should receive immediately
-    const liveNow = await LiveClass.findOne({
+
+    // Priority 1: Live class
+    let activeClass = await LiveClass.findOne({
       allowedStudents: studentId,
       status: "live",
-    })
-      .sort({ startTime: -1 })
-      .lean();
+    }).sort({ startTime: -1 }).lean();
 
-    if (liveNow) {
-      return res.json({ success: true, data: withMeetingUrl(liveNow) });
+    // Priority 2: Scheduled class that should be active now (with 15 min grace)
+    if (!activeClass) {
+      const graceMinutes = 15;
+      const graceStart = new Date(now.getTime() - graceMinutes * 60 * 1000);
+
+      activeClass = await LiveClass.findOne({
+        allowedStudents: studentId,
+        status: "scheduled",
+        startTime: { $lte: now },
+        endTime: { $gte: now },
+        startTime: { $gte: graceStart }   // simplified
+      }).sort({ startTime: 1 }).lean();
     }
 
-    // 2) Otherwise, allow scheduled class within the time window
-    const windowMinutes = 10;
-    const startWindow = new Date(now.getTime() - windowMinutes * 60 * 1000);
-
-    const scheduled = await LiveClass.findOne({
-      allowedStudents: studentId,
-      startTime: { $lte: now, $gte: startWindow },
-      endTime: { $gte: now },
-      status: "scheduled",
-    })
-      .sort({ startTime: 1 })
-      .lean();
-
-    if (!scheduled) {
-      return res.status(404).json({ message: "No active live class" });
+    if (!activeClass) {
+      return res.status(404).json({ 
+        message: "No active live class at the moment",
+        currentTime: now.toISOString()
+      });
     }
 
-    res.json({ success: true, data: withMeetingUrl(scheduled) });
+    res.json({ success: true, data: withMeetingUrl(activeClass) });
   } catch (err) {
-    console.error("getStudentActiveClass error", err);
+    console.error("getStudentActiveClass error:", err);
     res.status(500).json({ message: "Failed to load active class" });
   }
 };
@@ -173,9 +195,7 @@ exports.setLiveClassStatus = async (req, res) => {
     const actorId = req.userId;
     const actor = await Signup.findById(actorId).select("role");
     if (!actor || !["teacher", "admin"].includes(actor.role)) {
-      return res
-        .status(403)
-        .json({ message: "Only teachers/admin can update live class status" });
+      return res.status(403).json({ message: "Only teachers/admin can update status" });
     }
 
     const { id } = req.params;
@@ -186,8 +206,10 @@ exports.setLiveClassStatus = async (req, res) => {
       return res.status(400).json({ message: "Invalid status" });
     }
 
-    // Teacher can update only own classes; admin can update any class.
-    const query = actor.role === "teacher" ? { _id: id, createdBy: actorId } : { _id: id };
+    const query = actor.role === "teacher" 
+      ? { _id: id, createdBy: actorId } 
+      : { _id: id };
+
     const liveClass = await LiveClass.findOne(query);
     if (!liveClass) {
       return res.status(404).json({ message: "Live class not found or access denied" });
@@ -196,10 +218,10 @@ exports.setLiveClassStatus = async (req, res) => {
     liveClass.status = status;
     await liveClass.save();
 
-    return res.json({ success: true, data: withMeetingUrl(liveClass) });
+    res.json({ success: true, data: withMeetingUrl(liveClass) });
   } catch (err) {
     console.error("setLiveClassStatus error", err);
-    return res.status(500).json({ message: "Failed to update live class" });
+    res.status(500).json({ message: "Failed to update live class" });
   }
 };
 
@@ -208,22 +230,26 @@ exports.deleteLiveClass = async (req, res) => {
     const actorId = req.userId;
     const actor = await Signup.findById(actorId).select("role");
     if (!actor || !["teacher", "admin"].includes(actor.role)) {
-      return res
-        .status(403)
-        .json({ message: "Only teachers/admin can delete live classes" });
+      return res.status(403).json({ message: "Only teachers/admin can delete live classes" });
     }
 
     const { id } = req.params;
-    const query = actor.role === "teacher" ? { _id: id, createdBy: actorId } : { _id: id };
+    const query = actor.role === "teacher" 
+      ? { _id: id, createdBy: actorId } 
+      : { _id: id };
+
     const deleted = await LiveClass.findOneAndDelete(query);
     if (!deleted) {
       return res.status(404).json({ message: "Live class not found or access denied" });
     }
 
-    return res.json({ success: true, message: "Live class deleted", data: withMeetingUrl(deleted) });
+    res.json({ 
+      success: true, 
+      message: "Live class deleted successfully", 
+      data: withMeetingUrl(deleted) 
+    });
   } catch (err) {
     console.error("deleteLiveClass error", err);
-    return res.status(500).json({ message: "Failed to delete live class" });
+    res.status(500).json({ message: "Failed to delete live class" });
   }
 };
-
